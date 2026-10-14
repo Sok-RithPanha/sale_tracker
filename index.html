@@ -116,28 +116,20 @@
         // 1. FIREBASE CONFIGURATION
         // TODO: Replace "YOUR_API_KEY_HERE" with your actual Web API Key from Project Settings
 
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+        const firebaseConfig = {
+            apiKey: "AIzaSyCGtoOaSkXJ9Tfu3r777GKQ7R41LDJH7r4",
+            authDomain: "saletracker-76738.firebaseapp.com",
+            databaseURL: "https://saletracker-76738-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "saletracker-76738",
+            storageBucket: "saletracker-76738.firebasestorage.app",
+            messagingSenderId: "999245882616",
+            appId: "1:999245882616:web:486ada83381a085a2b070d",
+            measurementId: "G-V7HFXNMH46"
+        };
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyCGtoOaSkXJ9Tfu3r777GKQ7R41LDJH7r4",
-  authDomain: "saletracker-76738.firebaseapp.com",
-  databaseURL: "https://saletracker-76738-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "saletracker-76738",
-  storageBucket: "saletracker-76738.firebasestorage.app",
-  messagingSenderId: "999245882616",
-  appId: "1:999245882616:web:486ada83381a085a2b070d",
-  measurementId: "G-V7HFXNMH46"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
 
         // 2. STATE & DOM ELEMENTS
         let currentTransactions = [];
