@@ -42,7 +42,7 @@
                     <i class="fa-solid fa-chart-pie"></i>
                 </div>
                 <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-blue-500">
-                    RTY
+                    TrackerPro
                 </h1>
             </div>
             <div class="text-sm text-slate-500 flex items-center gap-2">
@@ -198,10 +198,25 @@
     </div>
 
     <!-- Application Logic -->
-    <script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, collection, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Firebase Configuration ---
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
         // --- State Management ---
         let records = [];
-        const LOCAL_STORAGE_KEY = 'trackerProData';
+        let currentUser = null;
+
+        // Update indicator text
+        document.querySelector('header .text-slate-500').innerHTML = '<span class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span> Cloud Sync Active';
 
         // --- DOM Elements ---
         const dashboardView = document.getElementById('dashboard-view');
@@ -212,44 +227,21 @@
         const toast = document.getElementById('toast');
         const toastMessage = document.getElementById('toast-message');
 
-        // --- Initialization ---
-        function init() {
-            loadData();
-            setupMonthFilter();
-            renderDashboard();
-            
-            // Set default date to today for the form
-            document.getElementById('record-date').valueAsDate = new Date();
-        }
-
-        // --- Data Loading & Saving ---
-        function loadData() {
-            const storedData = localStorage.getItem(LOCAL_STORAGE_KEY);
-            if (storedData) {
-                records = JSON.parse(storedData);
-            }
-        }
-
-        function saveData() {
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(records));
-        }
-
-        // --- View Navigation ---
-        function showView(viewName) {
+        // --- View Navigation (Exposed to Window for HTML onclick) ---
+        window.showView = function(viewName) {
             if (viewName === 'dashboard') {
                 dashboardView.classList.remove('hidden');
                 formView.classList.add('hidden');
-                renderDashboard();
+                window.renderDashboard();
             } else if (viewName === 'form') {
                 dashboardView.classList.add('hidden');
                 formView.classList.remove('hidden');
             }
-        }
+        };
 
-        function openForm(type) {
+        window.openForm = function(type) {
             const isSale = type === 'sale';
             
-            // UI Updates based on type
             document.getElementById('form-title').innerText = isSale ? 'Add Sales Revenue' : 'Add Expense';
             document.getElementById('label-name').innerText = isSale ? 'Product/Service Name' : 'Expense Item Name';
             document.getElementById('record-type').value = type;
@@ -265,53 +257,67 @@
                 submitBtn.className = 'w-full py-3.5 px-4 text-white font-bold rounded-xl shadow-md transition-colors hover:opacity-90 bg-red-600 hover:bg-red-700';
             }
 
-            // Reset form fields except date
             document.getElementById('record-name').value = '';
             document.getElementById('record-amount').value = '';
+            document.getElementById('record-date').valueAsDate = new Date();
             
-            showView('form');
-        }
+            window.showView('form');
+        };
 
         // --- Form Submission ---
-        recordForm.addEventListener('submit', function(e) {
+        recordForm.addEventListener('submit', async function(e) {
             e.preventDefault();
+            if (!currentUser) return showToast('Please wait for connection...', 'bg-red-600');
             
             const type = document.getElementById('record-type').value;
             const name = document.getElementById('record-name').value;
             const amount = parseFloat(document.getElementById('record-amount').value);
             const date = document.getElementById('record-date').value;
 
-            const newRecord = {
-                id: generateId(),
-                type: type,
-                name: name,
-                amount: amount,
-                date: date
-            };
+            // Disable button to prevent double submission
+            const submitBtn = document.getElementById('submit-btn');
+            submitBtn.disabled = true;
+            submitBtn.style.opacity = '0.7';
 
-            records.push(newRecord);
-            saveData();
-            
-            // Reset and update month filter if a new month was introduced
-            setupMonthFilter(date.substring(0, 7)); 
-            
-            showToast(type === 'sale' ? 'Revenue added successfully!' : 'Expense added successfully!');
-            showView('dashboard');
+            try {
+                // Using public collection so any device visiting this app can see the shared ledger
+                const recordsRef = collection(db, 'artifacts', appId, 'public', 'data', 'transactions');
+                await addDoc(recordsRef, {
+                    type: type,
+                    name: name,
+                    amount: amount,
+                    date: date,
+                    timestamp: new Date().toISOString()
+                });
+                
+                showToast(type === 'sale' ? 'Revenue synced to cloud!' : 'Expense synced to cloud!');
+                window.showView('dashboard');
+            } catch (error) {
+                console.error("Error adding document: ", error);
+                showToast('Failed to save record.', 'bg-red-600');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.style.opacity = '1';
+            }
         });
 
         // --- Delete Record ---
-        function deleteRecord(id) {
-            // Using a custom modal is better, but keeping it simple as requested without native alerts.
-            // Automatically deleting upon click for seamless UX.
-            records = records.filter(record => record.id !== id);
-            saveData();
-            renderDashboard();
-            showToast('Record deleted.', 'bg-slate-700');
-        }
+        window.deleteRecord = async function(id) {
+            if (!currentUser) return;
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'transactions', id);
+                await deleteDoc(docRef);
+                showToast('Record deleted from cloud.', 'bg-slate-700');
+            } catch (error) {
+                console.error("Error deleting document: ", error);
+                showToast('Failed to delete record.', 'bg-red-600');
+            }
+        };
 
         // --- Core Rendering Logic ---
-        function renderDashboard() {
+        window.renderDashboard = function() {
             const selectedMonth = monthFilter.value;
+            if (!selectedMonth) return;
             
             // Filter records for selected month
             const filteredRecords = records.filter(r => r.date.startsWith(selectedMonth));
@@ -363,8 +369,8 @@
                 tableBody.innerHTML = `
                     <tr>
                         <td colspan="5" class="px-6 py-12 text-center text-slate-400">
-                            <i class="fa-solid fa-folder-open text-4xl mb-3 opacity-50"></i>
-                            <p>No transactions found for this month.</p>
+                            <i class="fa-solid fa-cloud text-4xl mb-3 opacity-50"></i>
+                            <p>No cloud transactions found for this month.</p>
                             <p class="text-sm mt-1">Click the buttons above to add one.</p>
                         </td>
                     </tr>
@@ -393,97 +399,113 @@
                         ${isSale ? '+' : '-'}${formatCurrency(record.amount)}
                     </td>
                     <td class="px-6 py-4 text-center">
-                        <button onclick="deleteRecord('${record.id}')" class="text-slate-300 hover:text-red-500 transition-colors p-2 rounded-lg hover:bg-red-50 focus:outline-none" title="Delete">
+                        <button onclick="window.deleteRecord('${record.id}')" class="text-slate-300 hover:text-red-500 transition-colors p-2 rounded-lg hover:bg-red-50 focus:outline-none" title="Delete">
                             <i class="fa-regular fa-trash-can"></i>
                         </button>
                     </td>
                 `;
                 tableBody.appendChild(tr);
             });
-        }
+        };
 
         // --- Helper Functions ---
-
-        // Setup Month Dropdown based on data
-        function setupMonthFilter(forceSelectMonth = null) {
-            const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
+        function setupMonthFilter() {
+            const currentMonth = new Date().toISOString().substring(0, 7);
             let months = new Set();
             
-            // Add all months from records
-            records.forEach(r => months.add(r.date.substring(0, 7)));
-            
-            // Always ensure current month is in the list
+            records.forEach(r => {
+                if (r.date) months.add(r.date.substring(0, 7));
+            });
             months.add(currentMonth);
             
-            // Convert to array and sort descending (newest first)
             months = Array.from(months).sort().reverse();
             
-            // Preserve selection or use forced/current
-            const currentSelection = forceSelectMonth || monthFilter.value || currentMonth;
-            
+            const currentSelection = monthFilter.value || currentMonth;
             monthFilter.innerHTML = '';
+            
             months.forEach(monthStr => {
                 const option = document.createElement('option');
                 option.value = monthStr;
-                
-                // Format for display (e.g., "October 2023")
                 const dateObj = new Date(monthStr + '-01T00:00:00');
                 option.textContent = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
-                
-                if (monthStr === currentSelection) {
-                    option.selected = true;
-                }
-                
+                if (monthStr === currentSelection) option.selected = true;
                 monthFilter.appendChild(option);
             });
         }
 
         function formatCurrency(amount) {
-            return new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: 'USD'
-            }).format(amount);
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
         }
 
         function formatDate(dateString) {
+            if (!dateString) return '';
             const options = { year: 'numeric', month: 'short', day: 'numeric' };
-            // Add time to prevent timezone offset issues showing previous day
             return new Date(dateString + 'T12:00:00').toLocaleDateString('en-US', options);
         }
 
-        function generateId() {
-            return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
-        }
-
-        // Prevent XSS in table display
         function escapeHTML(str) {
             const div = document.createElement('div');
             div.textContent = str;
             return div.innerHTML;
         }
 
-        // Custom Toast Notification (Replaces alerts)
         let toastTimeout;
         function showToast(message, bgColorClass = 'bg-slate-800') {
             toastMessage.innerText = message;
-            
-            // Reset classes
             toast.className = `fixed bottom-4 right-4 transform transition-all duration-300 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50 ${bgColorClass}`;
             
-            // Show
             requestAnimationFrame(() => {
                 toast.classList.remove('translate-y-20', 'opacity-0');
             });
             
-            // Hide after 3 seconds
             clearTimeout(toastTimeout);
             toastTimeout = setTimeout(() => {
                 toast.classList.add('translate-y-20', 'opacity-0');
             }, 3000);
         }
 
-        // Run on load
-        window.onload = init;
+        // --- Firebase Initialization & Realtime Listener ---
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Auth Error:", error);
+                showToast("Authentication failed", "bg-red-600");
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                
+                // Fetch public shared ledger
+                const recordsRef = collection(db, 'artifacts', appId, 'public', 'data', 'transactions');
+                
+                onSnapshot(recordsRef, (snapshot) => {
+                    records = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+                    setupMonthFilter();
+                    window.renderDashboard();
+                }, (error) => {
+                    console.error("Firestore listen error: ", error);
+                    showToast("Error syncing data", "bg-red-600");
+                });
+            } else {
+                currentUser = null;
+                records = [];
+                window.renderDashboard();
+            }
+        });
+
+        // Bootstrap
+        initAuth();
+        setupMonthFilter(); // initial setup with current month
 
     </script>
 </body>
