@@ -7,9 +7,9 @@
     <!-- Tailwind CSS for Styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Firebase App (the core Firebase SDK) -->
+    <!-- Firebase App (the core Firebase SDK v8) -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <!-- Firebase Realtime Database -->
+    <!-- Firebase Realtime Database v8 -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 </head>
 <body class="bg-gray-100 text-gray-800 font-sans min-h-screen p-4 md:p-8">
@@ -113,9 +113,7 @@
     </div>
 
     <script>
-        // 1. FIREBASE CONFIGURATION
-        // TODO: Replace "YOUR_API_KEY_HERE" with your actual Web API Key from Project Settings
-
+        // 1. FIREBASE CONFIGURATION (Exact keys from your screenshot)
         const firebaseConfig = {
             apiKey: "AIzaSyCGtoOaSkXJ9Tfu3r777GKQ7R41LDJH7r4",
             authDomain: "saletracker-76738.firebaseapp.com",
@@ -128,8 +126,11 @@
         };
 
         // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const analytics = getAnalytics(app);
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.database();
+        const transactionsRef = db.ref('transactions');
 
         // 2. STATE & DOM ELEMENTS
         let currentTransactions = [];
@@ -151,7 +152,7 @@
         monthFilter.value = currentMonthString;
 
         // 3. UI FUNCTIONS
-        function toggleForm(type) {
+        window.toggleForm = function(type) {
             formSection.classList.remove('hidden');
             entryType.value = type;
             
@@ -167,12 +168,12 @@
             
             // Set default date to today
             entryDate.value = today.toISOString().split('T')[0];
-        }
+        };
 
-        function closeForm() {
+        window.closeForm = function() {
             formSection.classList.add('hidden');
             trackerForm.reset();
-        }
+        };
 
         // 4. FIREBASE DATA HANDLING
         
@@ -288,7 +289,6 @@
             balanceEl.textContent = `${balance >= 0 ? '' : '-'}$${Math.abs(balance).toFixed(2)}`;
             balanceEl.className = `text-3xl font-bold mt-2 ${balance >= 0 ? 'text-blue-700' : 'text-red-700'}`;
         }
-
     </script>
 </body>
 </html>
